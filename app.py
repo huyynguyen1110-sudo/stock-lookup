@@ -101,11 +101,18 @@ def show_ohlcv(df):
         chg_s = f"{chg:+.2f}" if pd.notna(chg) else '-'
         pct_s = f"{pct:+.2f}%" if pd.notna(pct) else '-'
 
+        def price_color(val):
+            ref = r['prev_close']
+            if not pd.notna(ref): return None
+            if val > ref: return '#00b35f'
+            if val < ref: return '#e63939'
+            return '#f0a500'
+
         cells  = td(pd.to_datetime(r['time']).strftime('%d/%m/%Y'), 'left')
         cells += td(chg_s, color=clr, bold=True)
         cells += td(pct_s, color=clr, bold=True)
         for col in ['open','high','low','close']:
-            cells += td(f"{r[col]:.2f}")
+            cells += td(f"{r[col]:.2f}", color=price_color(r[col]))
         if has_value:
             tb = r['value']/r['volume'] if r.get('volume',0) > 0 else 0
             cells += td(f"{tb:.2f}")
