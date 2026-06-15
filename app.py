@@ -49,16 +49,21 @@ with tab1:
         row = info.iloc[0]
         st.subheader(row.get('symbol', symbol))
 
+        ff_raw = float(row.get('free_float_percentage') or 0)
+        outstanding = float(row.get('outstanding_shares') or 1)
+        ff_pct = ff_raw if ff_raw <= 100 else (ff_raw / outstanding * 100)
+        charter = float(row.get('charter_capital') or 0)
+
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Sàn", row.get('exchange', '-'))
-        c2.metric("Vốn điều lệ (tỷ)", f"{float(row.get('charter_capital') or 0)/1e9:,.0f}")
-        c3.metric("CP lưu hành (triệu)", f"{float(row.get('outstanding_shares') or 0)/1e6:,.1f}")
-        c4.metric("Free float", f"{float(row.get('free_float_percentage') or 0):.1f}%")
+        c2.metric("Vốn điều lệ (tỷ)", f"{charter/1e9:,.0f}" if charter else "-")
+        c3.metric("CP lưu hành (triệu)", f"{outstanding/1e6:,.1f}")
+        c4.metric("Free float", f"{ff_pct:.1f}%")
 
         c5, c6, c7, c8 = st.columns(4)
         c5.metric("CEO", row.get('ceo_name', '-'))
-        c6.metric("Thành lập", str(row.get('founded_date', '-'))[:10] if row.get('founded_date') else '-')
-        c7.metric("Niêm yết", str(row.get('listing_date', '-'))[:10] if row.get('listing_date') else '-')
+        c6.metric("Thành lập", str(row.get('founded_date', ''))[:10] if row.get('founded_date') else '-')
+        c7.metric("Niêm yết", str(row.get('listing_date', ''))[:10] if row.get('listing_date') else '-')
         c8.metric("Giá niêm yết", f"{float(row.get('listing_price') or 0)/1000:,.1f}k")
 
         with st.expander("📋 Mô hình kinh doanh"):
@@ -85,9 +90,9 @@ with tab1:
                 sh = sh[['name', 'ownership_percentage', 'shares_owned', 'update_date']].copy()
                 sh['update_date'] = sh['update_date'].astype(str).str[:10]
                 sh.columns = ['Tên cổ đông', '% sở hữu', 'Số CP', 'Ngày CĐ']
-                st.dataframe(sh, use_container_width=True, hide_index=True)
             except Exception:
-                st.dataframe(sh, use_container_width=True, hide_index=True)
+                pass
+            st.dataframe(sh, use_container_width=True, hide_index=True)
 
         st.subheader("🏗️ Cơ cấu sở hữu")
         own = fetch(lambda: company.ownership())
