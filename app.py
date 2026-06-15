@@ -8,10 +8,15 @@ st.set_page_config(page_title="Tra cứu cổ phiếu VN", page_icon="📈", lay
 
 st.markdown("""
 <style>
-html, body, [class*="css"] { font-size: 16px !important; }
-.stDataFrame table { font-size: 15px !important; }
-[data-testid="stMetricValue"] { font-size: 26px !important; }
-[data-testid="stMetricLabel"] { font-size: 14px !important; }
+html, body, p, div, span, li, label { font-size: 17px !important; }
+table { font-size: 16px !important; border-collapse: collapse; width: 100%; }
+thead th { font-size: 16px !important; font-weight: bold; background: #f0f2f6; padding: 8px 12px; }
+tbody td { font-size: 16px !important; padding: 7px 12px; border-bottom: 1px solid #e6e9ef; }
+tbody tr:hover { background: #f8f9fb; }
+[data-testid="stMetricValue"] { font-size: 28px !important; font-weight: 600; }
+[data-testid="stMetricLabel"] { font-size: 15px !important; }
+h1 { font-size: 28px !important; }
+h2, h3 { font-size: 22px !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -41,6 +46,26 @@ def fetch(fn, delay=0.8):
         return r
     except Exception:
         return None
+
+def fmt_df(df):
+    df2 = df.copy()
+    for col in df2.select_dtypes(include='number').columns:
+        def fmt_val(x):
+            if pd.isna(x):
+                return '-'
+            f = float(x)
+            if f == int(f) and abs(f) >= 1:
+                return f"{int(f):,}"
+            elif abs(f) < 1000:
+                return f"{f:,.2f}"
+            else:
+                return f"{f:,.0f}"
+        df2[col] = df2[col].apply(fmt_val)
+    return df2
+
+def show(df):
+    if df is not None and not df.empty:
+        st.table(fmt_df(df))
 
 ref = Reference()
 fun = Fundamental()
@@ -106,22 +131,20 @@ with tab1:
             try:
                 sh = sh[['name', 'ownership_percentage', 'shares_owned', 'update_date']].copy()
                 sh['update_date'] = sh['update_date'].astype(str).str[:10]
-                sh['shares_owned'] = sh['shares_owned'].apply(lambda x: f"{int(x):,}" if pd.notna(x) else '-')
                 sh.columns = ['Tên cổ đông', '% sở hữu', 'Số CP', 'Ngày CĐ']
             except Exception:
                 pass
-            st.dataframe(sh, use_container_width=True, hide_index=True)
+            show(sh)
 
         st.subheader("🏗️ Cơ cấu sở hữu")
         own = fetch(lambda: company.ownership())
         if own is not None and not own.empty:
             try:
                 own = own[['owner_type', 'ownership_percentage', 'shares_owned']].copy()
-                own['shares_owned'] = own['shares_owned'].apply(lambda x: f"{int(x):,}" if pd.notna(x) else '-')
                 own.columns = ['Loại', '% sở hữu', 'Số CP']
             except Exception:
                 pass
-            st.dataframe(own, use_container_width=True, hide_index=True)
+            show(own)
 
     with col_b:
         st.subheader("👔 Ban lãnh đạo")
@@ -130,9 +153,9 @@ with tab1:
             try:
                 off = officers[['name', 'position', 'from_date']].copy()
                 off.columns = ['Họ tên', 'Chức vụ', 'Từ năm']
-                st.dataframe(off, use_container_width=True, hide_index=True)
+                show(off)
             except Exception:
-                st.dataframe(officers, use_container_width=True, hide_index=True)
+                show(officers)
 
         st.subheader("🏢 Công ty con")
         subs = fetch(lambda: company.subsidiaries())
@@ -141,9 +164,9 @@ with tab1:
                 s = subs[['name', 'ownership_percent', 'charter_capital']].copy()
                 s['charter_capital'] = (s['charter_capital'] / 1e9).round(1)
                 s.columns = ['Tên', '% sở hữu', 'Vốn (tỷ)']
-                st.dataframe(s, use_container_width=True, hide_index=True)
+                show(s)
             except Exception:
-                st.dataframe(subs, use_container_width=True, hide_index=True)
+                show(subs)
 
 with tab2:
     st.subheader(f"💹 Giá hiện tại — {symbol}")
@@ -187,7 +210,7 @@ with tab2:
                 'Giá bán': [f"{float(qrow.get(f'ask_price_{i}') or 0)/1000:,.2f}" for i in range(1,4)],
                 'KL bán': [f"{int(qrow.get(f'ask_vol_{i}') or 0):,}" for i in range(1,4)],
             }, index=['Bước 1', 'Bước 2', 'Bước 3'])
-            st.dataframe(bid_ask, use_container_width=True)
+            st.table(bid_ask)
         except Exception:
             st.info("Không có dữ liệu bảng giá bid/ask")
 
@@ -204,7 +227,7 @@ with tab2:
             st.line_chart(ohlcv.set_index('time')['close'], height=200)
             ohlcv_show = ohlcv.sort_values('time', ascending=False).head(20).copy()
             ohlcv_show['time'] = ohlcv_show['time'].dt.strftime('%d/%m/%Y')
-            st.dataframe(ohlcv_show, use_container_width=True, hide_index=True)
+            show(ohlcv_show)
 
     with col_right:
         st.subheader("⚡ Khớp lệnh gần nhất")
@@ -216,38 +239,38 @@ with tab2:
                 t['price'] = t['price'].apply(lambda x: f"{x:,.2f}")
                 t['volume'] = t['volume'].apply(lambda x: f"{x:,}")
                 t.columns = ['Giờ', 'Giá (nghìn)', 'KL', 'Chiều', 'ID']
-                st.dataframe(t[['Giờ', 'Giá (nghìn)', 'KL', 'Chiều']], use_container_width=True, hide_index=True)
+                st.table(t[['Giờ', 'Giá (nghìn)', 'KL', 'Chiều']])
             except Exception:
-                st.dataframe(trades.head(20), use_container_width=True, hide_index=True)
+                show(trades.head(20))
 
 with tab3:
     st.subheader(f"📊 Chỉ số tài chính — {symbol}")
     ratio = fetch(lambda: eq_fun.ratio())
     if ratio is not None and not ratio.empty:
-        st.dataframe(ratio, use_container_width=True, hide_index=True)
+        show(ratio)
 
     col_l, col_r = st.columns(2)
     with col_l:
         st.subheader("📋 KQKD theo quý")
         income_q = fetch(lambda: eq_fun.income_statement(period='quarter'))
         if income_q is not None and not income_q.empty:
-            st.dataframe(income_q, use_container_width=True, hide_index=True)
+            show(income_q)
 
     with col_r:
         st.subheader("📋 KQKD theo năm")
         income_y = fetch(lambda: eq_fun.income_statement(period='year'))
         if income_y is not None and not income_y.empty:
-            st.dataframe(income_y, use_container_width=True, hide_index=True)
+            show(income_y)
 
     st.subheader("🏦 Bảng cân đối kế toán (năm)")
     bs = fetch(lambda: eq_fun.balance_sheet(period='year'))
     if bs is not None and not bs.empty:
-        st.dataframe(bs, use_container_width=True, hide_index=True)
+        show(bs)
 
     st.subheader("💸 Lưu chuyển tiền tệ (năm)")
     cf = fetch(lambda: eq_fun.cash_flow(period='year'))
     if cf is not None and not cf.empty:
-        st.dataframe(cf, use_container_width=True, hide_index=True)
+        show(cf)
 
     st.subheader("💰 Lịch sử tăng vốn")
     cap = fetch(lambda: company.capital_history())
@@ -255,10 +278,9 @@ with tab3:
         try:
             cap['Vốn (tỷ)'] = (cap['charter_capital'] / 1e9).round(1)
             cap['Ngày'] = cap['date'].astype(str).str[:10]
-            st.dataframe(cap[['Ngày', 'Vốn (tỷ)']].sort_values('Ngày', ascending=False),
-                        use_container_width=True, hide_index=True)
+            show(cap[['Ngày', 'Vốn (tỷ)']].sort_values('Ngày', ascending=False))
         except Exception:
-            st.dataframe(cap, use_container_width=True, hide_index=True)
+            show(cap)
 
 with tab4:
     col_n, col_e = st.columns(2)
@@ -278,13 +300,13 @@ with tab4:
         st.subheader(f"📅 Sự kiện — {symbol}")
         events = fetch(lambda: company.events())
         if events is not None and not events.empty:
-            st.dataframe(events, use_container_width=True, hide_index=True)
+            show(events)
         else:
             st.info("Không có sự kiện")
 
         st.subheader("🔄 Giao dịch nội bộ")
         insider = fetch(lambda: company.insider_trading())
         if insider is not None and not insider.empty:
-            st.dataframe(insider, use_container_width=True, hide_index=True)
+            show(insider)
         else:
             st.info("Không có dữ liệu giao dịch nội bộ")
