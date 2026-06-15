@@ -5,6 +5,16 @@ import warnings
 warnings.filterwarnings('ignore')
 
 st.set_page_config(page_title="Tra cứu cổ phiếu VN", page_icon="📈", layout="wide")
+
+st.markdown("""
+<style>
+html, body, [class*="css"] { font-size: 16px !important; }
+.stDataFrame table { font-size: 15px !important; }
+[data-testid="stMetricValue"] { font-size: 26px !important; }
+[data-testid="stMetricLabel"] { font-size: 14px !important; }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("📈 Tra cứu cổ phiếu Việt Nam")
 
 col1, col2 = st.columns([5, 1])
@@ -96,6 +106,7 @@ with tab1:
             try:
                 sh = sh[['name', 'ownership_percentage', 'shares_owned', 'update_date']].copy()
                 sh['update_date'] = sh['update_date'].astype(str).str[:10]
+                sh['shares_owned'] = sh['shares_owned'].apply(lambda x: f"{int(x):,}" if pd.notna(x) else '-')
                 sh.columns = ['Tên cổ đông', '% sở hữu', 'Số CP', 'Ngày CĐ']
             except Exception:
                 pass
@@ -106,6 +117,7 @@ with tab1:
         if own is not None and not own.empty:
             try:
                 own = own[['owner_type', 'ownership_percentage', 'shares_owned']].copy()
+                own['shares_owned'] = own['shares_owned'].apply(lambda x: f"{int(x):,}" if pd.notna(x) else '-')
                 own.columns = ['Loại', '% sở hữu', 'Số CP']
             except Exception:
                 pass
