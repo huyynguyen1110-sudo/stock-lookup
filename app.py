@@ -51,12 +51,19 @@ with tab1:
 
         ff_raw = float(row.get('free_float_percentage') or 0)
         outstanding = float(row.get('outstanding_shares') or 1)
-        ff_pct = ff_raw if ff_raw <= 100 else (ff_raw / outstanding * 100)
+        if ff_raw <= 100:
+            ff_pct = ff_raw
+        elif ff_raw <= outstanding:
+            ff_pct = ff_raw / outstanding * 100
+        else:
+            ff_pct = ff_raw
+            while ff_pct > 100:
+                ff_pct /= 100
         charter = float(row.get('charter_capital') or 0)
 
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Sàn", row.get('exchange', '-'))
-        c2.metric("Vốn điều lệ (tỷ)", f"{charter/1e9:,.0f}" if charter else "-")
+        c2.metric("Vốn điều lệ (tỷ)", f"{charter/1e9:,.0f}" if charter >= 1e9 else "-")
         c3.metric("CP lưu hành (triệu)", f"{outstanding/1e6:,.1f}")
         c4.metric("Free float", f"{ff_pct:.1f}%")
 
