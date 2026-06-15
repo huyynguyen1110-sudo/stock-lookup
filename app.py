@@ -70,32 +70,55 @@ def show(df):
     if df is not None and not df.empty:
         st.table(fmt_df(df))
 
-def fmt_ohlcv(df):
-    """Format bảng giá lịch sử theo kiểu FireAnt"""
-    df2 = df.sort_values('time', ascending=False).copy()
+def show_ohlcv(df):
+    """Bảng giá lịch sử FireAnt style — màu xanh/đỏ, không chia 1000 (vnstock OHLCV đã là nghìn đ)"""
+    df2 = df.sort_values('time', ascending=False).copy().reset_index(drop=True)
     df2['prev_close'] = df2['close'].shift(-1)
-    df2['change'] = (df2['close'] - df2['prev_close']) / 1000
-    df2['pct'] = (df2['change'] / (df2['prev_close'] / 1000) * 100)
+    df2['change'] = df2['close'] - df2['prev_close']
+    df2['pct'] = df2['change'] / df2['prev_close'] * 100
 
     has_value = 'value' in df2.columns
 
-    result = pd.DataFrame()
-    result['NGÀY'] = pd.to_datetime(df2['time']).dt.strftime('%d/%m/%Y')
-    result['THAY ĐỔI'] = df2['change'].apply(
-        lambda x: f"{x:+.2f}" if pd.notna(x) else '-')
-    result['%'] = df2['pct'].apply(
-        lambda x: f"{x:+.2f}%" if pd.notna(x) else '-')
-    result['MỞ'] = (df2['open'] / 1000).round(2)
-    result['CAO'] = (df2['high'] / 1000).round(2)
-    result['THẤP'] = (df2['low'] / 1000).round(2)
-    result['ĐÓNG'] = (df2['close'] / 1000).round(2)
-    if has_value:
-        result['TB'] = (df2['value'] / df2['volume'] / 1000).round(2)
-        result['TỔNG KL'] = df2['volume'].apply(lambda x: f"{int(x):,}" if pd.notna(x) else '-')
-        result['TỔNG GT'] = df2['value'].apply(lambda x: f"{int(x):,}" if pd.notna(x) else '-')
-    else:
-        result['TỔNG KL'] = df2['volume'].apply(lambda x: f"{int(x):,}" if pd.notna(x) else '-')
-    return result.head(20)
+    th = lambda t, align='right': f'<th style="padding:8px 12px;text-align:{align};background:#f0f2f6;font-size:15px;font-weight:bold;">{t}</th>'
+    headers  = [th('NGÀY','left'), th('THAY ĐỔI'), th('%'), th('MỞ'), th('CAO'), th('THẤP'), th('ĐÓNG')]
+    if has_value: headers.append(th('TB'))
+    headers.append(th('TỔNG KL'))
+    if has_value: headers.append(th('TỔNG GT'))
+
+    rows = ''
+    for i, r in df2.head(20).iterrows():
+        chg = r['change']
+        pct = r['pct']
+        if pd.notna(chg) and chg > 0:   clr = '#00b35f'
+        elif pd.notna(chg) and chg < 0: clr = '#e63939'
+        else:                            clr = '#f0a500'
+
+        bg   = '#ffffff' if i % 2 == 0 else '#f8f9fb'
+        td   = lambda v, align='right', color=None, bold=False: (
+            f'<td style="padding:7px 12px;text-align:{align};border-bottom:1px solid #e6e9ef;'
+            f'font-size:15px;{"color:"+color+";" if color else ""}{"font-weight:600;" if bold else ""}">{v}</td>'
+        )
+        chg_s = f"{chg:+.2f}" if pd.notna(chg) else '-'
+        pct_s = f"{pct:+.2f}%" if pd.notna(pct) else '-'
+
+        cells  = td(pd.to_datetime(r['time']).strftime('%d/%m/%Y'), 'left')
+        cells += td(chg_s, color=clr, bold=True)
+        cells += td(pct_s, color=clr, bold=True)
+        for col in ['open','high','low','close']:
+            cells += td(f"{r[col]:.2f}")
+        if has_value:
+            tb = r['value']/r['volume'] if r.get('volume',0) > 0 else 0
+            cells += td(f"{tb:.2f}")
+        cells += td(f"{int(r['volume']):,}")
+        if has_value:
+            cells += td(f"{int(r['value']):,}")
+
+        rows += f'<tr style="background:{bg};">{cells}</tr>'
+
+    html = (f'<table style="width:100%;border-collapse:collapse;">'
+            f'<thead><tr>{"".join(headers)}</tr></thead>'
+            f'<tbody>{rows}</tbody></table>')
+    st.markdown(html, unsafe_allow_html=True)
 
 ref = Reference()
 fun = Fundamental()
@@ -261,8 +284,8 @@ with tab2:
         if ohlcv is not None and not ohlcv.empty:
             ohlcv_chart = ohlcv.copy()
             ohlcv_chart['time'] = pd.to_datetime(ohlcv_chart['time'])
-            st.line_chart(ohlcv_chart.set_index('time')['close'] / 1000, height=200)
-            st.table(fmt_ohlcv(ohlcv))
+            st.line_chart(ohlcv_chart.set_index('time')['close'], height=200)
+            show_ohlcv(ohlcv)
 
     with col_right:
         st.subheader("⚡ Khớp lệnh gần nhất")
