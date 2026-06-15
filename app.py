@@ -44,9 +44,6 @@ eq_fun = fun.equity(symbol)
 # ── Tabs ───────────────────────────────────────────────────────────────────────
 tab1, tab2, tab3, tab4 = st.tabs(["🏢 Công ty", "📊 Giá & Giao dịch", "💰 Tài chính", "📰 Tin tức & Sự kiện"])
 
-# ══════════════════════════════════════════════════════
-# TAB 1 — THÔNG TIN CÔNG TY
-# ══════════════════════════════════════════════════════
 with tab1:
     with st.spinner("Đang tải thông tin công ty..."):
         info = fetch(lambda: company.info())
@@ -57,15 +54,15 @@ with tab1:
 
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Sàn", row.get('exchange', '-'))
-        c2.metric("Vốn điều lệ (tỷ)", f"{row.get('charter_capital', 0)/1e9:,.0f}")
-        c3.metric("CP lưu hành (triệu)", f"{row.get('outstanding_shares', 0)/1e6:,.1f}")
-        c4.metric("Free float", f"{row.get('free_float_percentage', 0):.1f}%")
+        c2.metric("Vốn điều lệ (tỷ)", f"{(row.get('charter_capital') or 0)/1e9:,.0f}")
+        c3.metric("CP lưu hành (triệu)", f"{(row.get('outstanding_shares') or 0)/1e6:,.1f}")
+        c4.metric("Free float", f"{(row.get('free_float_percentage') or 0):.1f}%")
 
         c5, c6, c7, c8 = st.columns(4)
         c5.metric("CEO", row.get('ceo_name', '-'))
         c6.metric("Thành lập", row.get('founded_date', '-')[:10] if row.get('founded_date') else '-')
         c7.metric("Niêm yết", row.get('listing_date', '-')[:10] if row.get('listing_date') else '-')
-        c8.metric("Giá niêm yết", f"{row.get('listing_price', 0)/1000:,.1f}k")
+        c8.metric("Giá niêm yết", f"{(row.get('listing_price') or 0)/1000:,.1f}k")
 
         with st.expander("📋 Mô hình kinh doanh"):
             st.write(row.get('business_model', '-'))
@@ -119,9 +116,6 @@ with tab1:
             s.columns = ['Tên', '% sở hữu', 'Vốn (tỷ)']
             st.dataframe(s, use_container_width=True, hide_index=True)
 
-# ══════════════════════════════════════════════════════
-# TAB 2 — GIÁ & GIAO DỊCH
-# ══════════════════════════════════════════════════════
 with tab2:
     st.subheader(f"💹 Giá hiện tại — {symbol}")
     with st.spinner("Đang tải giá..."):
@@ -129,28 +123,28 @@ with tab2:
 
     if quote is not None and not quote.empty:
         row = quote.iloc[0]
-        price = row.get('close_price', 0)
-        change = row.get('price_change', 0)
-        pct = row.get('percent_change', 0)
+        price = row.get('close_price') or 0
+        change = row.get('price_change') or 0
+        pct = row.get('percent_change') or 0
 
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("Giá (nghìn đ)", f"{price/1000:,.2f}", f"{change/1000:+,.2f} ({pct:+.2f}%)")
-        c2.metric("Mở cửa", f"{row.get('open_price',0)/1000:,.2f}")
-        c3.metric("Cao nhất", f"{row.get('high_price',0)/1000:,.2f}")
-        c4.metric("Thấp nhất", f"{row.get('low_price',0)/1000:,.2f}")
-        c5.metric("TB khớp", f"{row.get('average_price',0)/1000:,.2f}")
+        c2.metric("Mở cửa", f"{(row.get('open_price') or 0)/1000:,.2f}")
+        c3.metric("Cao nhất", f"{(row.get('high_price') or 0)/1000:,.2f}")
+        c4.metric("Thấp nhất", f"{(row.get('low_price') or 0)/1000:,.2f}")
+        c5.metric("TB khớp", f"{(row.get('average_price') or 0)/1000:,.2f}")
 
         c6, c7, c8, c9, c10 = st.columns(5)
-        c6.metric("Giá tham chiếu", f"{row.get('reference_price',0)/1000:,.2f}")
-        c7.metric("Giá trần", f"{row.get('ceiling_price',0)/1000:,.2f}")
-        c8.metric("Giá sàn", f"{row.get('floor_price',0)/1000:,.2f}")
-        c9.metric("KL khớp (triệu CP)", f"{row.get('volume_accumulated',0)/1e6:,.2f}")
-        c10.metric("Giá trị (tỷ)", f"{row.get('total_value',0)/1e9:,.1f}")
+        c6.metric("Giá tham chiếu", f"{(row.get('reference_price') or 0)/1000:,.2f}")
+        c7.metric("Giá trần", f"{(row.get('ceiling_price') or 0)/1000:,.2f}")
+        c8.metric("Giá sàn", f"{(row.get('floor_price') or 0)/1000:,.2f}")
+        c9.metric("KL khớp (triệu CP)", f"{(row.get('volume_accumulated') or 0)/1e6:,.2f}")
+        c10.metric("Giá trị (tỷ)", f"{(row.get('total_value') or 0)/1e9:,.1f}")
 
         st.subheader("🌏 Khối ngoại")
         cn1, cn2, cn3 = st.columns(3)
-        buy_vol = row.get('foreign_buy_volume', 0)
-        sell_vol = row.get('foreign_sell_volume', 0)
+        buy_vol = row.get('foreign_buy_volume') or 0
+        sell_vol = row.get('foreign_sell_volume') or 0
         net = buy_vol - sell_vol
         cn1.metric("NN mua (nghìn CP)", f"{buy_vol/1000:,.0f}")
         cn2.metric("NN bán (nghìn CP)", f"{sell_vol/1000:,.0f}")
@@ -158,10 +152,10 @@ with tab2:
 
         st.subheader("📋 Bảng giá (3 bước)")
         bid_ask = pd.DataFrame({
-            'Giá mua': [f"{row.get(f'bid_price_{i}',0)/1000:,.2f}" for i in range(1,4)],
-            'KL mua': [f"{row.get(f'bid_vol_{i}',0):,}" for i in range(1,4)],
-            'Giá bán': [f"{row.get(f'ask_price_{i}',0)/1000:,.2f}" for i in range(1,4)],
-            'KL bán': [f"{row.get(f'ask_vol_{i}',0):,}" for i in range(1,4)],
+            'Giá mua': [f"{(row.get(f'bid_price_{i}') or 0)/1000:,.2f}" for i in range(1,4)],
+            'KL mua': [f"{(row.get(f'bid_vol_{i}') or 0):,}" for i in range(1,4)],
+            'Giá bán': [f"{(row.get(f'ask_price_{i}') or 0)/1000:,.2f}" for i in range(1,4)],
+            'KL bán': [f"{(row.get(f'ask_vol_{i}') or 0):,}" for i in range(1,4)],
         }, index=['Bước 1', 'Bước 2', 'Bước 3'])
         st.dataframe(bid_ask, use_container_width=True)
 
@@ -194,9 +188,6 @@ with tab2:
             t.columns = ['Giờ', 'Giá (nghìn)', 'KL', 'Chiều', 'ID']
             st.dataframe(t[['Giờ', 'Giá (nghìn)', 'KL', 'Chiều']], use_container_width=True, hide_index=True)
 
-# ══════════════════════════════════════════════════════
-# TAB 3 — TÀI CHÍNH
-# ══════════════════════════════════════════════════════
 with tab3:
     st.subheader(f"📊 Chỉ số tài chính — {symbol}")
     with st.spinner("Đang tải..."):
@@ -240,9 +231,6 @@ with tab3:
         st.dataframe(cap[['Ngày', 'Vốn (tỷ)']].sort_values('Ngày', ascending=False),
                     use_container_width=True, hide_index=True)
 
-# ══════════════════════════════════════════════════════
-# TAB 4 — TIN TỨC & SỰ KIỆN
-# ══════════════════════════════════════════════════════
 with tab4:
     col_n, col_e = st.columns(2)
     with col_n:
