@@ -48,11 +48,14 @@ def fetch(fn, delay=0.8):
         return None
 
 def fmt_df(df):
+    """Format tất cả cột số có dấu phẩy, bỏ item_id"""
     df2 = df.copy()
+    # Bỏ cột item_id nếu có
+    if 'item_id' in df2.columns:
+        df2 = df2.drop(columns=['item_id'])
     for col in df2.select_dtypes(include='number').columns:
         def fmt_val(x):
-            if pd.isna(x):
-                return '-'
+            if pd.isna(x): return '-'
             f = float(x)
             if f == int(f) and abs(f) >= 1:
                 return f"{int(f):,}"
@@ -67,6 +70,33 @@ def show(df):
     if df is not None and not df.empty:
         st.table(fmt_df(df))
 
+def fmt_ohlcv(df):
+    """Format bảng giá lịch sử theo kiểu FireAnt"""
+    df2 = df.sort_values('time', ascending=False).copy()
+    df2['prev_close'] = df2['close'].shift(-1)
+    df2['change'] = (df2['close'] - df2['prev_close']) / 1000
+    df2['pct'] = (df2['change'] / (df2['prev_close'] / 1000) * 100)
+
+    has_value = 'value' in df2.columns
+
+    result = pd.DataFrame()
+    result['NGÀY'] = pd.to_datetime(df2['time']).dt.strftime('%d/%m/%Y')
+    result['THAY ĐỔI'] = df2['change'].apply(
+        lambda x: f"{x:+.2f}" if pd.notna(x) else '-')
+    result['%'] = df2['pct'].apply(
+        lambda x: f"{x:+.2f}%" if pd.notna(x) else '-')
+    result['MỞ'] = (df2['open'] / 1000).round(2)
+    result['CAO'] = (df2['high'] / 1000).round(2)
+    result['THẤP'] = (df2['low'] / 1000).round(2)
+    result['ĐÓNG'] = (df2['close'] / 1000).round(2)
+    if has_value:
+        result['TB'] = (df2['value'] / df2['volume'] / 1000).round(2)
+        result['TỔNG KL'] = df2['volume'].apply(lambda x: f"{int(x):,}" if pd.notna(x) else '-')
+        result['TỔNG GT'] = df2['value'].apply(lambda x: f"{int(x):,}" if pd.notna(x) else '-')
+    else:
+        result['TỔNG KL'] = df2['volume'].apply(lambda x: f"{int(x):,}" if pd.notna(x) else '-')
+    return result.head(20)
+
 ref = Reference()
 fun = Fundamental()
 mkt = Market()
@@ -76,6 +106,9 @@ eq_fun = fun.equity(symbol)
 
 tab1, tab2, tab3, tab4 = st.tabs(["🏢 Công ty", "📊 Giá & Giao dịch", "💰 Tài chính", "📰 Tin tức & Sự kiện"])
 
+# ══════════════════════════════════════════════════════
+# TAB 1 — THÔNG TIN CÔNG TY
+# ══════════════════════════════════════════════════════
 with tab1:
     with st.spinner("Đang tải thông tin công ty..."):
         info = fetch(lambda: company.info())
@@ -168,6 +201,9 @@ with tab1:
             except Exception:
                 show(subs)
 
+# ══════════════════════════════════════════════════════
+# TAB 2 — GIÁ & GIAO DỊCH
+# ══════════════════════════════════════════════════════
 with tab2:
     st.subheader(f"💹 Giá hiện tại — {symbol}")
     with st.spinner("Đang tải giá..."):
@@ -217,17 +253,16 @@ with tab2:
     st.divider()
     col_left, col_right = st.columns([3, 2])
     with col_left:
-        st.subheader("📈 Lịch sử giá (30 ngày)")
+        st.subheader("📈 Lịch sử giá (Đv: nghìn đ)")
         today = pd.Timestamp.now()
         start = (today - pd.Timedelta(days=40)).strftime('%Y-%m-%d')
         end = today.strftime('%Y-%m-%d')
         ohlcv = fetch(lambda: eq_mkt.ohlcv(start=start, end=end, interval='1D'))
         if ohlcv is not None and not ohlcv.empty:
-            ohlcv['time'] = pd.to_datetime(ohlcv['time'])
-            st.line_chart(ohlcv.set_index('time')['close'], height=200)
-            ohlcv_show = ohlcv.sort_values('time', ascending=False).head(20).copy()
-            ohlcv_show['time'] = ohlcv_show['time'].dt.strftime('%d/%m/%Y')
-            show(ohlcv_show)
+            ohlcv_chart = ohlcv.copy()
+            ohlcv_chart['time'] = pd.to_datetime(ohlcv_chart['time'])
+            st.line_chart(ohlcv_chart.set_index('time')['close'] / 1000, height=200)
+            st.table(fmt_ohlcv(ohlcv))
 
     with col_right:
         st.subheader("⚡ Khớp lệnh gần nhất")
@@ -243,6 +278,9 @@ with tab2:
             except Exception:
                 show(trades.head(20))
 
+# ══════════════════════════════════════════════════════
+# TAB 3 — TÀI CHÍNH
+# ══════════════════════════════════════════════════════
 with tab3:
     st.subheader(f"📊 Chỉ số tài chính — {symbol}")
     ratio = fetch(lambda: eq_fun.ratio())
@@ -282,6 +320,9 @@ with tab3:
         except Exception:
             show(cap)
 
+# ══════════════════════════════════════════════════════
+# TAB 4 — TIN TỨC & SỰ KIỆN
+# ══════════════════════════════════════════════════════
 with tab4:
     col_n, col_e = st.columns(2)
     with col_n:
