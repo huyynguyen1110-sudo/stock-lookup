@@ -452,6 +452,34 @@ with tab4:
             show(events)
         else:
             st.info("Không có sự kiện")
+
+        st.subheader("💹 Lịch sử phát hành & tăng vốn")
+        cap = fetch(lambda: company.capital_history())
+        if cap is not None and not cap.empty:
+            try:
+                cap2 = cap.copy()
+                # Chuẩn hoá tên cột phổ biến của vnstock
+                rename = {}
+                for c in cap2.columns:
+                    cl = c.lower()
+                    if 'date' in cl or 'ngay' in cl:            rename[c] = 'Ngày'
+                    elif 'charter' in cl or 'von' in cl or 'capital' in cl: rename[c] = 'Vốn ĐL (tỷ)'
+                    elif 'share' in cl or 'cp' in cl or 'luuhanh' in cl:   rename[c] = 'CP lưu hành'
+                    elif 'type' in cl or 'loai' in cl or 'method' in cl:   rename[c] = 'Loại'
+                    elif 'ratio' in cl or 'ti_le' in cl:                   rename[c] = 'Tỷ lệ'
+                    elif 'price' in cl or 'gia' in cl:                      rename[c] = 'Giá PH'
+                cap2 = cap2.rename(columns=rename)
+                if 'Vốn ĐL (tỷ)' in cap2.columns:
+                    cap2['Vốn ĐL (tỷ)'] = (pd.to_numeric(cap2['Vốn ĐL (tỷ)'], errors='coerce') / 1e9).round(1)
+                if 'Ngày' in cap2.columns:
+                    cap2['Ngày'] = cap2['Ngày'].astype(str).str[:10]
+                    cap2 = cap2.sort_values('Ngày', ascending=False)
+                show(cap2)
+            except Exception:
+                show(cap)
+        else:
+            st.info("Không có dữ liệu lịch sử tăng vốn")
+
     with col_ins:
         st.subheader("🔄 Giao dịch nội bộ")
         insider = fetch(lambda: company.insider_trading())
