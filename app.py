@@ -2,6 +2,10 @@ import streamlit as st
 import pandas as pd
 import time
 import warnings
+import urllib.request
+import urllib.parse
+import xml.etree.ElementTree as ET
+from email.utils import parsedate_to_datetime
 warnings.filterwarnings('ignore')
 
 st.set_page_config(page_title="Tra cứu cổ phiếu VN", page_icon="📈", layout="wide")
@@ -69,6 +73,47 @@ def fmt_df(df):
 def show(df):
     if df is not None and not df.empty:
         st.table(fmt_df(df))
+
+def fetch_news_all(symbol):
+    """Tổng hợp tin từ Google News RSS (CafeF, NDH, Vietstock, VNeconomy...) từ 01/01/2025"""
+    news = []
+    seen = set()
+    queries = [
+        f'"{symbol}" cổ phiếu after:2025-01-01',
+        f'"{symbol}" (site:cafef.vn OR site:vietstock.vn OR site:ndh.vn OR site:vneconomy.vn) after:2025-01-01',
+    ]
+    for q in queries:
+        url = (f"https://news.google.com/rss/search"
+               f"?q={urllib.parse.quote(q)}&hl=vi&gl=VN&ceid=VN:vi")
+        try:
+            req = urllib.request.Request(
+                url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                root = ET.fromstring(r.read())
+            for item in root.findall('.//item'):
+                title = (item.findtext('title') or '').strip()
+                link  = item.findtext('link') or ''
+                pub   = item.findtext('pubDate') or ''
+                src   = item.findtext('source') or 'Google News'
+                if not title or title in seen:
+                    continue
+                seen.add(title)
+                try:
+                    dt = parsedate_to_datetime(pub)
+                    if dt.year < 2025:
+                        continue
+                    date_str = dt.strftime('%d/%m/%Y')
+                    ts = dt.timestamp()
+                except Exception:
+                    date_str = '-'; ts = 0
+                news.append({'Ngày': date_str, 'Tiêu đề': title,
+                             'Nguồn': src, 'Link': link, '_ts': ts})
+        except Exception:
+            pass
+    news.sort(key=lambda x: x['_ts'], reverse=True)
+    for n in news:
+        del n['_ts']
+    return news
 
 def show_ohlcv(df):
     """Bảng giá lịch sử FireAnt style — màu xanh/đỏ, không chia 1000 (vnstock OHLCV đã là nghìn đ)"""
@@ -354,30 +399,55 @@ with tab3:
 # TAB 4 — TIN TỨC & SỰ KIỆN
 # ══════════════════════════════════════════════════════
 with tab4:
-    col_n, col_e = st.columns(2)
-    with col_n:
-        st.subheader(f"📰 Tin tức — {symbol}")
-        news = fetch(lambda: company.news())
-        if news is not None and not news.empty:
-            for _, nrow in news.head(15).iterrows():
-                date = str(nrow.get('publish_time', ''))[:10]
-                st.markdown(f"**{nrow.get('title', '')}**  \n*{date}*")
-                st.caption(str(nrow.get('head', ''))[:200])
-                st.divider()
-        else:
-            st.info("Không có tin tức")
-
-    with col_e:
+    # Sự kiện + giao dịch nội bộ (nhỏ, load nhanh)
+    col_ev, col_ins = st.columns(2)
+    with col_ev:
         st.subheader(f"📅 Sự kiện — {symbol}")
         events = fetch(lambda: company.events())
         if events is not None and not events.empty:
             show(events)
         else:
             st.info("Không có sự kiện")
-
+    with col_ins:
         st.subheader("🔄 Giao dịch nội bộ")
         insider = fetch(lambda: company.insider_trading())
         if insider is not None and not insider.empty:
             show(insider)
         else:
             st.info("Không có dữ liệu giao dịch nội bộ")
+
+    st.divider()
+
+    # Tin tức tổng hợp từ 01/01/2025
+    st.subheader(f"📰 Tin tức {symbol} từ 01/01/2025 — tổng hợp CafeF · NDH · Vietstock · VNeconomy")
+    with st.spinner("Đang tổng hợp tin tức..."):
+        news_list = fetch_news_all(symbol)
+
+    if news_list:
+        st.caption(f"Tìm thấy **{len(news_list)}** bài viết")
+
+        # Lọc theo nguồn
+        sources = sorted({n['Nguồn'] for n in news_list})
+        sel_src = st.multiselect("Lọc theo nguồn:", sources, default=sources, key='news_src')
+        filtered = [n for n in news_list if n['Nguồn'] in sel_src]
+
+        # Hiển thị từng bài
+        for n in filtered:
+            st.markdown(
+                f"[**{n['Tiêu đề']}**]({n['Link']})  \n"
+                f"<span style='color:#888;font-size:14px;'>{n['Ngày']} &nbsp;·&nbsp; {n['Nguồn']}</span>",
+                unsafe_allow_html=True
+            )
+            st.markdown("<hr style='margin:6px 0;border:none;border-top:1px solid #e6e9ef;'>",
+                        unsafe_allow_html=True)
+    else:
+        # Fallback vnstock
+        st.info("Không lấy được từ Google News, hiển thị từ vnstock:")
+        news_vn = fetch(lambda: company.news())
+        if news_vn is not None and not news_vn.empty:
+            for _, nrow in news_vn.head(30).iterrows():
+                date = str(nrow.get('publish_time', ''))[:10]
+                title = nrow.get('title', '')
+                st.markdown(f"**{title}**  \n*{date}*")
+                st.markdown("<hr style='margin:6px 0;border:none;border-top:1px solid #e6e9ef;'>",
+                            unsafe_allow_html=True)
