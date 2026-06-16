@@ -443,31 +443,93 @@ with tab3:
 # TAB 4 — TIN TỨC & SỰ KIỆN
 # ══════════════════════════════════════════════════════
 with tab4:
-    # Sự kiện + giao dịch nội bộ (nhỏ, load nhanh)
-    col_ev, col_ins = st.columns(2)
-    with col_ev:
-        st.subheader(f"📅 Sự kiện — {symbol}")
-        events = fetch(lambda: company.events())
-        if events is not None and not events.empty:
-            show(events)
-        else:
-            st.info("Không có sự kiện")
+    import re
 
-        st.subheader("💹 Lịch sử phát hành & tăng vốn")
+    # ── SỰ KIỆN ──────────────────────────────────────────
+    st.subheader(f"📅 Sự kiện — {symbol}")
+    events = fetch(lambda: company.events())
+    if events is not None and not events.empty:
+        ev = events.copy()
+        # Map tên cột linh hoạt
+        col_map = {}
+        for c in ev.columns:
+            cl = c.lower()
+            if any(x in cl for x in ['ex_right','ex_date','khq','giao_dich','right_date']):
+                col_map[c] = 'GD KHQ'
+            elif any(x in cl for x in ['event','su_kien','title','name','desc','content']):
+                col_map[c] = 'SỰ KIỆN'
+            elif any(x in cl for x in ['impl','thuc','record','execution','ex_div','payment']):
+                col_map[c] = 'THỰC HIỆN'
+        ev = ev.rename(columns=col_map)
+        for dc in ['GD KHQ', 'THỰC HIỆN']:
+            if dc in ev.columns:
+                ev[dc] = ev[dc].astype(str).str[:10]
+
+        c_left, c_right = st.columns([3, 2])
+        with c_left:
+            keep = [c for c in ['GD KHQ', 'SỰ KIỆN', 'THỰC HIỆN'] if c in ev.columns]
+            show(ev[keep].reset_index(drop=True) if keep else ev)
+
+        with c_right:
+            # Parse cổ tức tiền và cổ tức CP theo năm
+            cash_by_year, stock_by_year = {}, {}
+            for _, row in ev.iterrows():
+                text = str(row.get('SỰ KIỆN', ''))
+                date = str(row.get('GD KHQ', ''))
+                year = date[:4]
+                if not year.isdigit(): continue
+                year = int(year)
+                # Cổ tức tiền: "500đ/CP"
+                if 'tiền' in text.lower() or 'tien' in text.lower():
+                    m = re.search(r'(\d[\d,\.]+)[đd]/CP', text, re.IGNORECASE)
+                    if m:
+                        val = int(m.group(1).replace(',','').replace('.',''))
+                        cash_by_year[year] = cash_by_year.get(year, 0) + val
+                # Cổ tức CP: "100:10" → 10%
+                if 'cổ phiếu' in text.lower() or 'cp' in text.lower():
+                    m = re.search(r'(\d+):(\d+)', text)
+                    if m:
+                        pct = round(int(m.group(2)) / int(m.group(1)) * 100, 1)
+                        stock_by_year[year] = stock_by_year.get(year, 0) + pct
+
+            if cash_by_year:
+                st.markdown("**Cổ tức bằng tiền (đ/CP)**")
+                df_c = pd.DataFrame.from_dict(cash_by_year, orient='index',
+                                              columns=['Tiền (đ)']).sort_index()
+                st.bar_chart(df_c, height=200)
+
+            if stock_by_year:
+                st.markdown("**Cổ tức bằng CP (%)**")
+                df_s = pd.DataFrame.from_dict(stock_by_year, orient='index',
+                                              columns=['CP (%)']).sort_index()
+                st.bar_chart(df_s, height=200)
+    else:
+        st.info("Không có sự kiện")
+
+    st.divider()
+
+    # ── GIAO DỊCH NỘI BỘ + LỊCH SỬ TĂNG VỐN ────────────
+    col_ins, col_cap = st.columns(2)
+    with col_ins:
+        st.subheader("🔄 Giao dịch nội bộ")
+        insider = fetch(lambda: company.insider_trading())
+        if insider is not None and not insider.empty:
+            show(insider)
+        else:
+            st.info("Không có dữ liệu giao dịch nội bộ")
+    with col_cap:
+        st.subheader("💹 Lịch sử tăng vốn")
         cap = fetch(lambda: company.capital_history())
         if cap is not None and not cap.empty:
             try:
                 cap2 = cap.copy()
-                # Chuẩn hoá tên cột phổ biến của vnstock
                 rename = {}
                 for c in cap2.columns:
                     cl = c.lower()
-                    if 'date' in cl or 'ngay' in cl:            rename[c] = 'Ngày'
-                    elif 'charter' in cl or 'von' in cl or 'capital' in cl: rename[c] = 'Vốn ĐL (tỷ)'
-                    elif 'share' in cl or 'cp' in cl or 'luuhanh' in cl:   rename[c] = 'CP lưu hành'
-                    elif 'type' in cl or 'loai' in cl or 'method' in cl:   rename[c] = 'Loại'
-                    elif 'ratio' in cl or 'ti_le' in cl:                   rename[c] = 'Tỷ lệ'
-                    elif 'price' in cl or 'gia' in cl:                      rename[c] = 'Giá PH'
+                    if 'date' in cl: rename[c] = 'Ngày'
+                    elif 'charter' in cl or 'capital' in cl: rename[c] = 'Vốn ĐL (tỷ)'
+                    elif 'share' in cl: rename[c] = 'CP lưu hành'
+                    elif 'type' in cl or 'method' in cl: rename[c] = 'Loại'
                 cap2 = cap2.rename(columns=rename)
                 if 'Vốn ĐL (tỷ)' in cap2.columns:
                     cap2['Vốn ĐL (tỷ)'] = (pd.to_numeric(cap2['Vốn ĐL (tỷ)'], errors='coerce') / 1e9).round(1)
@@ -479,14 +541,6 @@ with tab4:
                 show(cap)
         else:
             st.info("Không có dữ liệu lịch sử tăng vốn")
-
-    with col_ins:
-        st.subheader("🔄 Giao dịch nội bộ")
-        insider = fetch(lambda: company.insider_trading())
-        if insider is not None and not insider.empty:
-            show(insider)
-        else:
-            st.info("Không có dữ liệu giao dịch nội bộ")
 
     st.divider()
 
